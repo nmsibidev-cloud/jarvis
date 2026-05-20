@@ -27,6 +27,7 @@ const statusOptions: Array<{ label: string; value: "ALL" | ModelStatus }> = [
   { label: "All Status", value: "ALL" },
   { label: "Active", value: "ACTIVE" },
   { label: "Idle", value: "IDLE" },
+  { label: "Offline", value: "OFFLINE" },
   { label: "Error", value: "ERROR" },
   { label: "Updating", value: "UPDATING" }
 ];

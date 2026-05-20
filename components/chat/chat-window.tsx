@@ -21,6 +21,8 @@ type ChatWindowProps = {
   onMention: () => void;
   onTemplate: () => void;
   onSendMessage: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export function ChatWindow({
@@ -37,7 +39,9 @@ export function ChatWindow({
   onAttach,
   onMention,
   onTemplate,
-  onSendMessage
+  onSendMessage,
+  disabled = false,
+  disabledReason
 }: ChatWindowProps) {
   return (
     <section className="panel-base flex min-h-[620px] min-w-0 flex-col rounded-2xl">
@@ -54,8 +58,8 @@ export function ChatWindow({
           {messages.length ? (
             messages.map((message) => <ChatMessage agentName={agent?.name ?? "JARVIS"} key={message.id} message={message} />)
           ) : (
-            <div className="flex h-full min-h-[120px] items-center justify-center rounded-lg border border-dashed border-cyan-900/50 text-sm text-cyan-600">
-              Start a message to begin this session.
+            <div className="flex h-full min-h-[120px] items-center justify-center rounded-lg border border-dashed border-cyan-900/50 px-4 text-center text-sm text-cyan-600">
+              {disabledReason ?? "Start a message to begin this session."}
             </div>
           )}
 
@@ -63,6 +67,7 @@ export function ChatWindow({
         </div>
 
         <ChatInput
+          disabled={disabled}
           modelOptions={modelOptions}
           onAttach={onAttach}
           onChange={onDraftChange}

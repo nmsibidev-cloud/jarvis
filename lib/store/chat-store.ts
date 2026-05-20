@@ -82,12 +82,28 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   typingSessionIds: [],
 
   hydrate: (data) => {
-    const firstSession = data.chatSessions[0];
     const fallbackAgent = data.agents[0]?.id ?? "";
+    const fallbackModel = data.models[0]?.id ?? "";
+    const firstSession = data.chatSessions[0] ?? (fallbackAgent && fallbackModel
+      ? {
+          id: `session-${Date.now().toString(36)}`,
+          title: `Chat with ${data.agents[0]?.name ?? "Agent"}`,
+          agentId: fallbackAgent,
+          modelId: fallbackModel,
+          status: "ACTIVE" as const,
+          startedAt: formatStartedAt(),
+          updatedAt: "just now",
+          messageCount: 0,
+          tokensUsed: 0,
+          contextWindow: parseContextWindow(data.models[0]?.contextWindow ?? "128K"),
+          shared: false
+        }
+      : undefined);
+
     set({
       agents: data.agents,
       models: data.models,
-      sessions: data.chatSessions,
+      sessions: firstSession && data.chatSessions.length === 0 ? [firstSession] : data.chatSessions,
       messages: data.messages,
       selectedAgentId: firstSession?.agentId ?? fallbackAgent,
       selectedSessionId: firstSession?.id ?? "",

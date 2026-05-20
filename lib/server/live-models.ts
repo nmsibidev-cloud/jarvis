@@ -6,12 +6,34 @@ import { Model } from "@/types/model";
 
 const execFileAsync = promisify(execFile);
 
+type OpenClawModel = {
+  key: string;
+  name: string;
+  input?: string;
+  contextWindow?: number;
+  local?: boolean;
+  available?: boolean;
+  tags?: string[];
+  missing?: boolean;
+};
+
 type OllamaModel = {
   name: string;
   id: string;
   size: string;
   modified: string;
 };
+
+function providerFromKey(key: string) {
+  const provider = key.split("/")[0] ?? "unknown";
+  if (provider === "ollama") return "Ollama";
+  if (provider === "openai-codex") return "OpenAI Codex";
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Anthropic";
+  if (provider === "gemini" || provider === "google") return "Google";
+  if (provider === "qwen") return "Qwen";
+  return provider.replace(/(^|-)([a-z])/g, (_match, sep: string, char: string) => `${sep ? " " : ""}${char.toUpperCase()}`);
+}
 
 function parseOllamaList(output: string): OllamaModel[] {
   return output
@@ -26,6 +48,16 @@ function parseOllamaList(output: string): OllamaModel[] {
     .filter((item): item is OllamaModel => Boolean(item));
 }
 
+async function listOpenClawModels() {
+  try {
+    const { stdout } = await execFileAsync("openclaw", ["models", "list", "--json"], { timeout: 8000, maxBuffer: 1024 * 1024 * 2 });
+    const parsed = JSON.parse(stdout) as { models?: OpenClawModel[] };
+    return Array.isArray(parsed.models) ? parsed.models : [];
+  } catch {
+    return [];
+  }
+}
+
 async function listOllamaModels() {
   try {
     const { stdout } = await execFileAsync("ollama", ["list"], { timeout: 5000, maxBuffer: 1024 * 1024 });
@@ -33,6 +65,46 @@ async function listOllamaModels() {
   } catch {
     return [];
   }
+}
+
+function openClawModelToModel(model: OpenClawModel): Model {
+  const provider = providerFromKey(model.key);
+  return {
+    id: model.key,
+    name: model.name,
+    provider,
+    version: model.key,
+    type: model.local || provider === "Ollama" ? "LOCAL" : "API",
+    status: model.available && !model.missing ? "ACTIVE" : model.missing ? "OFFLINE" : "IDLE",
+    usage: model.tags?.includes("default") ? 10 : 0,
+    connectedAgents: model.tags?.includes("default") ? 1 : 0,
+    contextWindow: model.contextWindow ? `${model.contextWindow.toLocaleString()} tokens` : "Provider dependent",
+    quota: model.tags?.join(", ") || "Configured in OpenClaw",
+    addedOn: "OpenClaw model config",
+    description: `OpenClaw ${model.local ? "local" : "provider"} model (${model.input ?? "text"}).`,
+    apiEndpoint: provider === "Ollama" ? "http://127.0.0.1:11434" : "OpenClaw model provider",
+    localPath: model.local || provider === "Ollama" ? "OpenClaw/Ollama managed model" : ""
+  };
+}
+
+function ollamaModelToModel(model: OllamaModel, ollamaConnected: boolean): Model {
+  const baseName = model.name.replace(/:latest$/, "");
+  return {
+    id: `ollama/${baseName}`,
+    name: baseName,
+    provider: "Ollama",
+    version: model.id,
+    type: "LOCAL",
+    status: ollamaConnected ? "ACTIVE" : "OFFLINE",
+    usage: 0,
+    connectedAgents: 0,
+    contextWindow: "Detected locally",
+    quota: model.size,
+    addedOn: model.modified,
+    description: `Local Ollama model detected on this Mac (${model.size}).`,
+    apiEndpoint: "http://127.0.0.1:11434",
+    localPath: "Ollama managed model store"
+  };
 }
 
 function apiModel(params: {
@@ -51,7 +123,7 @@ function apiModel(params: {
     provider: params.provider,
     version: params.configured ? "configured" : "not configured",
     type: "API",
-    status: params.connected ? "ACTIVE" : params.configured ? "ERROR" : "IDLE",
+    status: params.connected ? "ACTIVE" : params.configured ? "OFFLINE" : "IDLE",
     usage: params.connected ? 5 : 0,
     connectedAgents: 0,
     contextWindow: params.contextWindow,
@@ -63,33 +135,31 @@ function apiModel(params: {
   };
 }
 
+function uniqueModels(models: Model[]) {
+  const seen = new Set<string>();
+  return models.filter((model) => {
+    const key = `${model.provider}:${model.name}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function getLiveModels(): Promise<Model[]> {
-  const [openai, anthropic, gemini, ollama, ollamaModels] = await Promise.all([
+  const [openai, anthropic, gemini, ollama, ollamaModels, openClawModels] = await Promise.all([
     checkOpenAiHealth(),
     checkAnthropicHealth(),
     checkGeminiHealth(),
     checkOllamaHealth(),
-    listOllamaModels()
+    listOllamaModels(),
+    listOpenClawModels()
   ]);
 
-  const localModels: Model[] = ollamaModels.map((model) => ({
-    id: `ollama-${model.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`,
-    name: model.name,
-    provider: "Ollama",
-    version: model.id,
-    type: "LOCAL",
-    status: ollama.connected ? "ACTIVE" : "ERROR",
-    usage: 0,
-    connectedAgents: 0,
-    contextWindow: "Detected locally",
-    quota: model.size,
-    addedOn: model.modified,
-    description: `Local Ollama model detected on this Mac (${model.size}).`,
-    apiEndpoint: ollama.endpoint ?? "http://127.0.0.1:11434",
-    localPath: "Ollama managed model store"
-  }));
+  const configuredModels = openClawModels.map(openClawModelToModel);
+  const localModels = ollamaModels.map((model) => ollamaModelToModel(model, ollama.connected));
 
-  return [
+  return uniqueModels([
+    ...configuredModels,
     ...localModels,
     apiModel({
       id: "provider-openai",
@@ -121,5 +191,5 @@ export async function getLiveModels(): Promise<Model[]> {
       message: gemini.message,
       contextWindow: "Provider dependent"
     })
-  ];
+  ]);
 }

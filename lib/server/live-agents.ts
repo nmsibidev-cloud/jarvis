@@ -28,6 +28,16 @@ type OpenClawStatus = {
   };
 };
 
+type OpenClawAgentListItem = {
+  id: string;
+  identityName?: string;
+  identityEmoji?: string;
+  workspace?: string;
+  model?: string;
+  bindings?: number;
+  isDefault?: boolean;
+};
+
 function initials(value: string) {
   return value
     .split(/[^a-z0-9]+/i)
@@ -69,13 +79,44 @@ async function readOpenClawStatus(): Promise<OpenClawStatus> {
   return JSON.parse(stdout) as OpenClawStatus;
 }
 
+async function readOpenClawAgents(): Promise<OpenClawAgentListItem[]> {
+  try {
+    const { stdout } = await execFileAsync("openclaw", ["agents", "list", "--json"], { timeout: 8000, maxBuffer: 1024 * 1024 });
+    const parsed = JSON.parse(stdout) as unknown;
+    return Array.isArray(parsed) ? parsed as OpenClawAgentListItem[] : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getLiveAgents(): Promise<Agent[]> {
-  const status = await readOpenClawStatus();
+  const [status, configuredAgents] = await Promise.all([readOpenClawStatus(), readOpenClawAgents()]);
   const cpuUsage = hostLoadPercent();
   const ramUsage = hostRamPercent();
   const createdAt = new Date().toISOString();
 
-  const openClawAgents: Agent[] = (status.agents?.agents ?? []).map((agent) => ({
+  const statusAgents = new Map((status.agents?.agents ?? []).map((agent) => [agent.id, agent]));
+
+  const openClawAgents: Agent[] = configuredAgents.length
+    ? configuredAgents.map((agent) => {
+      const runtime = statusAgents.get(agent.id);
+      return {
+        id: `openclaw-${agent.id}`,
+        name: agent.identityName ? `${agent.identityName}${agent.identityEmoji ? ` ${agent.identityEmoji}` : ""}` : `OpenClaw ${agent.id}`,
+        role: agent.isDefault ? "Default Local Agent" : "Local Agent",
+        initials: initials(agent.identityName ?? agent.id),
+        status: runtime?.bootstrapPending ? "BUSY" : runtime ? "ONLINE" : "IDLE",
+        currentTask: `${runtime?.sessionsCount ?? agent.bindings ?? 0} sessions in ${agent.workspace ?? runtime?.workspaceDir ?? "workspace"}`,
+        cpuUsage,
+        ramUsage,
+        assignedModel: agent.model ?? "Configured by OpenClaw runtime",
+        lastActive: ageLabel(runtime?.lastActiveAgeMs),
+        permissions: ["workspace_read", "session_orchestration", "tool_execution_with_policy"],
+        brain: "OpenClaw Workspace Memory",
+        createdAt: runtime?.lastUpdatedAt ? new Date(runtime.lastUpdatedAt).toISOString() : createdAt
+      };
+    })
+    : (status.agents?.agents ?? []).map((agent) => ({
     id: `openclaw-${agent.id}`,
     name: `OpenClaw ${agent.id}`,
     role: "Local Agent",

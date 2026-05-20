@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
 import { fetchWithTimeout, getErrorMessage } from "@/lib/server/http";
 
 export type ProviderHealth = {
-  provider: "openai" | "anthropic" | "gemini" | "ollama" | "agent-gateway";
+  provider: "openai" | "anthropic" | "gemini" | "ollama" | "agent-gateway" | "openclaw";
   configured: boolean;
   connected: boolean;
   endpoint?: string;
@@ -19,6 +22,8 @@ export type ProviderChatResult = {
   provider: ProviderHealth["provider"];
   live: boolean;
 };
+
+const execFileAsync = promisify(execFile);
 
 const ollamaBaseUrl = () => process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434";
 const gatewayBaseUrl = () => process.env.AGENT_GATEWAY_URL ?? "http://127.0.0.1:1878";
@@ -71,13 +76,25 @@ export async function checkGeminiHealth(): Promise<ProviderHealth> {
   }
 }
 
+export async function callOpenClawInfer({ prompt, modelName, systemPrompt }: ProviderChatRequest): Promise<ProviderChatResult> {
+  const fullPrompt = `${systemPrompt}\n\nUser request:\n${prompt}`;
+  const { stdout, stderr } = await execFileAsync("openclaw", ["infer", "model", "run", "--model", modelName, "--prompt", fullPrompt, "--json"], {
+    timeout: 120000,
+    maxBuffer: 1024 * 1024 * 2
+  });
+  const parsed = JSON.parse(stdout) as { outputs?: Array<{ text?: string }> };
+  const content = parsed.outputs?.map((output) => output.text).filter(Boolean).join("\n").trim() ?? "";
+  if (!content) throw new Error(stderr.trim() || `No text output returned from OpenClaw infer for ${modelName}`);
+  return { content, provider: "openclaw", live: true };
+}
+
 export async function callOllamaChat({ prompt, modelName, systemPrompt }: ProviderChatRequest): Promise<ProviderChatResult> {
-  const model = process.env.OLLAMA_MODEL || modelName || "llama3.1";
+  const model = process.env.OLLAMA_MODEL || modelName.replace(/^ollama\//, "") || "llama3.1";
   const response = await fetchWithTimeout(`${ollamaBaseUrl()}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, stream: false, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }] })
-  }, 15000);
+  }, 60000);
   if (!response.ok) throw new Error(`Ollama chat returned ${response.status}`);
   const data = await response.json() as { message?: { content?: string }; response?: string };
   return { content: data.message?.content ?? data.response ?? "", provider: "ollama", live: true };

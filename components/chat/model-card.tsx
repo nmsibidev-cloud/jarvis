@@ -10,7 +10,8 @@ type ModelCardProps = {
 const statusToneClass: Record<ChatModel["status"], string> = {
   ACTIVE: "text-emerald-300 border-emerald-500/35 bg-emerald-500/10",
   IDLE: "text-slate-300 border-slate-500/35 bg-slate-500/10",
-  ERROR: "text-rose-300 border-rose-500/35 bg-rose-500/10"
+  OFFLINE: "text-rose-300 border-rose-500/35 bg-rose-500/10",
+  ERROR: "text-red-300 border-red-500/35 bg-red-500/10"
 };
 
 export function ModelCard({ model, active, onSelect }: ModelCardProps) {

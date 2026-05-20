@@ -1,4 +1,4 @@
-export type ModelStatus = "ACTIVE" | "IDLE" | "ERROR" | "UPDATING";
+export type ModelStatus = "ACTIVE" | "IDLE" | "OFFLINE" | "ERROR" | "UPDATING";
 export type ModelType = "API" | "LOCAL";
 
 export type Model = {

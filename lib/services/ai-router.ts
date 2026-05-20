@@ -1,8 +1,7 @@
-import { agents } from "@/lib/data/agents";
-import { models } from "@/lib/data/models";
-import { callAnthropicChat, callGeminiChat, callOllamaChat, callOpenAiChat } from "@/lib/server/provider-clients";
+import { getChatBootstrap } from "@/lib/server/chat-persistence";
+import { callAnthropicChat, callGeminiChat, callOllamaChat, callOpenAiChat, callOpenClawInfer } from "@/lib/server/provider-clients";
 
-export type AiProvider = "openai" | "anthropic" | "gemini" | "ollama" | "local-agent";
+export type AiProvider = "openai" | "anthropic" | "gemini" | "ollama" | "openclaw" | "local-agent";
 
 export type AiRouteRequest = {
   agentId: string;
@@ -25,6 +24,7 @@ const providerByModelProvider: Record<string, AiProvider> = {
   Anthropic: "anthropic",
   Google: "gemini",
   Ollama: "ollama",
+  "OpenAI Codex": "openclaw",
   Meta: "local-agent",
   "Mistral AI": "local-agent"
 };
@@ -52,11 +52,13 @@ function buildMockResponse(agentName: string, modelName: string, prompt: string)
 }
 
 export async function routeAiMessage(request: AiRouteRequest): Promise<AiRouteResponse> {
-  const agent = agents.find((item) => item.id === request.agentId);
-  const model = models.find((item) => item.id === request.modelId);
+  const bootstrap = await getChatBootstrap();
+  const agent = bootstrap.agents.find((item) => item.id === request.agentId);
+  const model = bootstrap.models.find((item) => item.id === request.modelId);
   const agentName = agent?.name ?? "JARVIS";
   const agentRole = agent?.role ?? "AI Agent";
   const modelName = model?.name ?? "Unknown model";
+  const modelRef = model?.id ?? modelName;
   const provider = providerByModelProvider[model?.provider ?? ""] ?? "local-agent";
   const systemPrompt = buildSystemPrompt(agentName, agentRole);
 
@@ -68,8 +70,10 @@ export async function routeAiMessage(request: AiRouteRequest): Promise<AiRouteRe
         : provider === "gemini"
           ? await callGeminiChat({ prompt: request.prompt, modelName, systemPrompt })
           : provider === "ollama"
-            ? await callOllamaChat({ prompt: request.prompt, modelName: process.env.OLLAMA_MODEL ?? "llama3.1", systemPrompt })
-            : null;
+            ? await callOllamaChat({ prompt: request.prompt, modelName: modelRef, systemPrompt })
+            : provider === "openclaw"
+              ? await callOpenClawInfer({ prompt: request.prompt, modelName: modelRef, systemPrompt })
+              : null;
 
     if (result?.content) {
       return {
@@ -83,9 +87,9 @@ export async function routeAiMessage(request: AiRouteRequest): Promise<AiRouteRe
   } catch (error) {
     return {
       agentName,
-      content: buildMockResponse(agentName, modelName, request.prompt),
+      content: `Real model request failed for ${modelRef}: ${error instanceof Error ? error.message : String(error)}`,
       error: error instanceof Error ? error.message : String(error),
-      mocked: true,
+      mocked: false,
       modelName,
       provider
     };

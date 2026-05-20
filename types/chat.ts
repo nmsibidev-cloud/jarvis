@@ -1,5 +1,5 @@
 export type ChatAgentStatus = "ONLINE" | "IDLE" | "BUSY" | "OFFLINE";
-export type ChatModelStatus = "ACTIVE" | "IDLE" | "ERROR";
+export type ChatModelStatus = "ACTIVE" | "IDLE" | "OFFLINE" | "ERROR";
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ChatMessageSender = "USER" | "AGENT" | "SYSTEM";
 export type ChatMessageType = "text" | "markdown" | "code";

@@ -70,12 +70,11 @@ export default function ChatPage() {
       const response = await fetch("/api/chat/bootstrap", { cache: "no-store" });
       if (!response.ok) return chatMockData;
       return response.json();
-    },
-    initialData: chatMockData
+    }
   });
 
   useEffect(() => {
-    hydrate(bootstrapQuery.data);
+    if (bootstrapQuery.data) hydrate(bootstrapQuery.data);
   }, [bootstrapQuery.data, hydrate]);
 
   useEffect(() => {
@@ -115,6 +114,16 @@ export default function ChatPage() {
   const sessionMessages = useMemo(() => messages.filter((message) => message.sessionId === selectedSession?.id), [messages, selectedSession?.id]);
   const sessionsForAgent = useMemo(() => sessions.filter((session) => session.agentId === selectedAgentId), [selectedAgentId, sessions]);
   const isTyping = useMemo(() => typingSessionIds.includes(selectedSession?.id ?? ""), [selectedSession?.id, typingSessionIds]);
+  const chatDisabledReason = useMemo(() => {
+    if (!agents.length) return "No live agents were detected. Start or connect an agent to begin chatting.";
+    if (!models.length) return "No live models were detected. Connect Ollama or configure a provider model to begin chatting.";
+    if (!selectedAgent) return "Select an agent to begin chatting.";
+    if (selectedAgent.status === "OFFLINE") return `${selectedAgent.name} is offline. Select an online or idle agent to chat.`;
+    if (!selectedModel) return "Select a model to begin chatting.";
+    if (selectedModel.status === "OFFLINE" || selectedModel.status === "ERROR") return `${selectedModel.name} is unavailable. Select an active or idle model to chat.`;
+    return null;
+  }, [agents.length, models.length, selectedAgent, selectedModel]);
+  const isChatDisabled = Boolean(chatDisabledReason);
 
   const openModal = (modal: ModalState) => setActiveModal(modal);
   const closeModal = () => setActiveModal(null);
@@ -122,6 +131,14 @@ export default function ChatPage() {
   const handleSendMessage = () => {
     const prompt = draftMessage.trim();
     if (!prompt) return;
+    if (isChatDisabled) {
+      pushToast({
+        title: "Chat unavailable",
+        description: chatDisabledReason ?? "Select an available agent and model first.",
+        tone: "warning"
+      });
+      return;
+    }
     const sessionId = sendUserMessage(prompt);
     if (!sessionId) return;
 
@@ -292,6 +309,8 @@ export default function ChatPage() {
 
             <ChatWindow
               agent={selectedAgent}
+              disabled={isChatDisabled}
+              disabledReason={chatDisabledReason ?? undefined}
               draftMessage={draftMessage}
               messages={sessionMessages}
               modelOptions={models}

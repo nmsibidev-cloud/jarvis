@@ -42,29 +42,31 @@ export function ChatInput({
   return (
     <form className="space-y-2" onSubmit={handleSubmit}>
       <textarea
-        className="h-28 w-full resize-none rounded-xl border border-cyan-900/45 bg-[#030d19] px-3 py-2.5 text-sm text-cyan-100 outline-none transition placeholder:text-cyan-700 focus:border-cyan-500/70"
+        className="h-28 w-full resize-none rounded-xl border border-cyan-900/45 bg-[#030d19] px-3 py-2.5 text-sm text-cyan-100 outline-none transition placeholder:text-cyan-700 focus:border-cyan-500/70 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Type your message..."
+        placeholder={disabled ? "Select an online agent and active model to chat..." : "Type your message..."}
         value={value}
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <button className={actionButtonClassName} onClick={onAttach} type="button">
+        <button className={actionButtonClassName} disabled={disabled} onClick={onAttach} type="button">
           <Paperclip className="h-3.5 w-3.5" />
           Attach
         </button>
-        <button className={actionButtonClassName} onClick={onMention} type="button">
+        <button className={actionButtonClassName} disabled={disabled} onClick={onMention} type="button">
           <AtSign className="h-3.5 w-3.5" />
           Mention Agent
         </button>
-        <button className={actionButtonClassName} onClick={onTemplate} type="button">
+        <button className={actionButtonClassName} disabled={disabled} onClick={onTemplate} type="button">
           <Sparkles className="h-3.5 w-3.5" />
           Prompt Template
         </button>
 
         <label className="ml-auto flex h-9 min-w-[180px] items-center gap-2 rounded-md border border-cyan-900/45 bg-sky-950/40 px-2 text-xs text-cyan-500">
           <select
-            className="w-full bg-transparent text-xs text-cyan-200 outline-none"
+            className="w-full bg-transparent text-xs text-cyan-200 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={disabled || modelOptions.length === 0}
             onChange={(event) => onModelChange(event.target.value)}
             value={selectedModelId}
           >

@@ -124,11 +124,12 @@ export default function ModelsPage() {
     const total = models.length;
     const active = models.filter((model) => model.status === "ACTIVE").length;
     const idle = models.filter((model) => model.status === "IDLE").length;
+    const offline = models.filter((model) => model.status === "OFFLINE").length;
     const error = models.filter((model) => model.status === "ERROR").length;
     const local = models.filter((model) => model.type === "LOCAL").length;
     const api = models.filter((model) => model.type === "API").length;
     const avgUsage = total ? Math.round(models.reduce((sum, model) => sum + model.usage, 0) / total) : 0;
-    return { total, active, idle, error, local, api, avgUsage };
+    return { total, active, idle, offline, error, local, api, avgUsage };
   }, [models]);
 
   const providerBreakdown = useMemo(() => {
@@ -209,7 +210,7 @@ export default function ModelsPage() {
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <StatsCard description="All models" icon={Database} label="Total Models" tone="cyan" value={counts.total} />
             <StatsCard description="Currently active" icon={Activity} label="Active Models" tone="green" value={counts.active} />
-            <StatsCard description="Running locally" icon={HardDrive} label="Local Models" tone="amber" value={counts.local} />
+            <StatsCard description="Unreachable providers" icon={HardDrive} label="Offline" tone="amber" value={counts.offline} />
             <StatsCard description="Connected via API" icon={Bot} label="API Models" tone="slate" value={counts.api} />
             <StatsCard description="System capacity" icon={Gauge} label="Total Usage" tone="rose" value={`${counts.avgUsage}%`} />
           </section>
